@@ -1,0 +1,55 @@
+.TH mfschunktool "8" "March 2020" "MooseFS 3.0.112-1" "This is part of MooseFS"
+.SH NAME
+mfschunktool - checks chunk integrity offline
+.SH SYNOPSIS
+\fBmfschunktool\fP 
+[\fB\-f\fP]
+[\fB\-r\fP]
+[\fB\-n\fP]
+[\fB\-e\fP]
+[\fB\-x\fP]
+\fIchunk_file\fP ...
+.SH DESCRIPTION
+\fBmfschunktool\fP checks chunk integrity using stored CRC checksums in chunk's header.
+It can also 'repair' chunk (fix stored checksums). This tool may be useful to check last
+written chunks after possible data corruption (power down etc.)
+.PP
+Options:
+.TP
+\fB\-f\fP
+turn on fast mode (in this mode only last block is tested - usually this is enough to find corrupted chunks)
+.TP
+\fB\-r\fP
+turn on repair mode (if checksums on given chunk don't match then they will be overwritten by checksums calculated using actual data)
+.TP
+\fB\-n\fP
+turn on name fixing mode (if the chunk file name is not correct but there is proper file header, the tool will rename given file using data stored in the header)
+.TP
+\fB\-e\fP
+turn on empty block crc check for 1.0 version chunks (force checking crc values for non existing blocks - may fail in case of chunks that were truncated)
+.TP
+\fB\-x\fP
+turn on reporting successful check (print 'OK' message when everything is correct)
+.PP
+.SH "REPORTING BUGS"
+Report bugs to <bugs@moosefs.com>.
+.SH COPYRIGHT
+Copyright (C) 2020 Jakub Kruszona-Zawadzki, Core Technology Sp. z o.o.
+
+This file is part of MooseFS.
+
+MooseFS is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, version 2 (only).
+
+MooseFS is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with MooseFS; if not, write to the Free Software
+Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02111-1301, USA
+or visit http://www.gnu.org/licenses/gpl-2.0.html
+.SH "SEE ALSO"
+.BR mfschunkserver (8)

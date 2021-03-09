@@ -1,0 +1,87 @@
+.TH mfsmetalogger.cfg "5" "March 2020" "MooseFS 3.0.112-1" "This is part of MooseFS"
+.SH NAME
+mfsmetalogger.cfg \- configuration file for \fBmfsmetalogger\fP
+.SH DESCRIPTION
+The file \fBmfsmetalogger.cfg\fP contains configuration of MooseFS
+metalogger process.
+.SH SYNTAX
+.PP
+Syntax is:
+.TP
+.IB OPTION " = " VALUE
+.PP
+Lines starting with \fB#\fP character are ignored as comments.
+.SH OPTIONS
+Configuration options:
+.TP
+.B DATA_PATH
+where to store metadata files
+.TP
+.B LOCK_FILE
+(deprecated)
+daemon lock/pid file
+.TP
+.B WORKING_USER
+user to run daemon as
+.TP
+.B WORKING_GROUP
+group to run daemon as (optional - if empty then default user group will be used)
+.TP
+.B SYSLOG_IDENT
+name of process to place in syslog messages (default is mfsmetalogger)
+.TP
+.B LOCK_MEMORY
+whether to perform mlockall() to avoid swapping out mfsmetalogger process (default is 0, i.e. no)
+.TP
+.B LIMIT_GLIBC_MALLOC_ARENAS
+limit malloc arenas to given value - prevents server from using huge amount of virtual memory (Linux onty, default is 4)
+.TP
+.B DISABLE_OOM_KILLER
+disable out of memory killer (Linux only, default is 1)
+.TP
+.B NICE_LEVEL
+nice level to run daemon with (default is -19 if possible; note: process must be started as root to increase priority)
+.TP
+.B BACK_LOGS
+number of metadata change log files (default is 50)
+.TP
+.B BACK_META_KEEP_PREVIOUS
+number of previous metadata files to be kept (default is 3)
+.TP
+.B META_DOWNLOAD_FREQ
+metadata download frequency in hours (default is 24, at most \fBBACK_LOGS\fP/2)
+.TP
+.B BIND_HOST
+local address to use for master connections; default is *, i.e. default local address
+.TP
+.B MASTER_HOST
+address of MooseFS master host to connect with (default is mfsmaster)
+.TP
+.B MASTER_PORT
+number of MooseFS master port to connect with (default is 9420)
+.TP
+.B MASTER_RECONNECTION_DELAY
+delay in seconds before trying to reconnect to master after disconnection (default is 5)
+.TP
+.B MASTER_TIMEOUT
+timeout (in seconds) for master connections (default is 10)
+.SH COPYRIGHT
+Copyright (C) 2020 Jakub Kruszona-Zawadzki, Core Technology Sp. z o.o.
+
+This file is part of MooseFS.
+
+MooseFS is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, version 2 (only).
+
+MooseFS is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with MooseFS; if not, write to the Free Software
+Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02111-1301, USA
+or visit http://www.gnu.org/licenses/gpl-2.0.html
+.SH "SEE ALSO"
+.BR mfsmetalogger (8)

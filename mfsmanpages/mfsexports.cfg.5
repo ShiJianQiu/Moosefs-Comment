@@ -1,0 +1,162 @@
+.TH mfsexports.cfg "5" "March 2020" "MooseFS 3.0.112-1" "This is part of MooseFS"
+.SH NAME
+mfsexports.cfg \- MooseFS access control for \fBmfsmount\fPs
+.SH DESCRIPTION
+The file \fBmfsexports.cfg\fP contains MooseFS access list for \fBmfsmount\fP
+clients.
+.SH SYNTAX
+.PP
+Syntax is:
+.TP
+\fIADDRESS\fP \fIDIRECTORY\fP [\fIOPTIONS\fP]
+.PP
+Lines starting with \fB#\fP character are ignored as comments.
+.PP
+\fIADDRESS\fP can be specified in several forms:
+.PP
+.nf
+.ta +2i
+\fB*\fP	all addresses
+\fBn.n.n.n\fP	single IP address
+\fBn.n.n.n/b\fP	IP class specified by network address and number of significant bits
+\fBn.n.n.n/m.m.m.m\fP	IP class specified by network address and mask
+\fBf.f.f.f-t.t.t.t\fP	IP range specified by from-to addresses (inclusive)
+.fi
+.PP
+\fIDIRECTORY\fP can be \fB/\fP or path relative to MooseFS root; special
+value \fB.\fP means MFSMETA companion filesystem.
+.PP
+\fIOPTIONS\fP list:
+.TP
+.BR ro ", " readonly
+export tree in read-only mode; this is default
+.TP
+.BR rw ", " readwrite
+export tree in read-write mode
+.TP
+.B alldirs
+allows to mount any subdirectory of specified directory (similarly to NFS)
+.TP
+.B dynamicip
+allows reconnecting of already authenticated client from any IP address
+(the default is to check IP address on reconnect)
+.TP
+.B ignoregid
+disable testing of group access at \fBmfsmaster\fP level (it's still done
+at \fBmfsmount\fP level) - in this case "group" and "other" permissions are
+logically added; needed for supplementary groups to work (\fBmfsmaster\fP
+receives only user primary group information)
+.TP
+.B admin
+administrative privileges - currently: allow changing of quota values and storage classes management
+.TP
+\fBmaproot=\fP\fIUSER\fP[\fB:\fP\fIGROUP\fP]
+maps root (uid=0) accesses to given user and group (similarly to maproot
+option in NFS mounts); \fIUSER\fP and \fIGROUP\fP can be given either as
+name or number; if no group is specified, \fIUSER\fP's primary group is
+used. Names are resolved on \fBmfsmaster\fP side (see note below).
+.TP
+\fBmapall=\fP\fIUSER\fP[\fB:\fP\fIGROUP\fP]
+like above but maps all non privileged users (uid!=0) accesses to given
+user and group (see notes below).
+.TP
+\fBpassword=\fP\fIPASS\fP, \fBmd5pass=\fP\fIMD5\fP
+requires password authentication in order to access specified resource
+.TP
+\fBminversion=\fP\fIVER\fP
+rejects access from clients older than specified
+.TP
+\fBmingoal=\fP\fIN\fP, \fBmaxgoal=\fP\fIN\fP
+specify range in which goal can be set by users
+.TP
+\fBmintrashtime=\fP\fITDUR\fP, \fBmaxtrashtime=\fP\fITDUR\fP
+specify range in which trashtime can be set by users
+.TP
+\fBdisable=\fP\fIOPERATION[:OPERATION[:...]]\fP 
+do not allow the client to perform certain operations
+.PP
+Default options are: \fBro, maproot=999:999, mingoal=1, maxgoal=9, mintrashtime=0, maxtrashtime=4294967295\fP.
+.SH NOTES
+\fIUSER\fP and \fIGROUP\fP names (if not specified by explicit uid/gid
+number) are resolved on \fBmfsmaster\fP host.
+.PP
+TDUR can be specified as number without time unit (number of seconds) or
+combination of numbers with time units. Time units are:
+\fBW\fP,\fBD\fP,\fBH\fP,\fBM\fP,\fBS\fP. Order is important - less
+significant time units can't be defined before more significant time units.
+Time units are case insensitive.
+.PP
+Option \fBmapall\fP works in MooseFS in different way than in NFS, because MooseFS is
+using FUSE's "default_permissions" option. When \fBmapall\fP option is used, users
+see all objects with uid equal to mapped uid as their own and all other as
+root's objects. Similarly objects with gid equal to mapped gid are seen as
+objects with current user's primary group and all other objects as objects
+with group 0 (usually wheel). With \fBmapall\fP option set attribute cache
+in kernel is always turned off.
+.PP
+Option \fBdisable\fP can take many parameters (operations to disable) in two
+ways: as a list separated by colons (:) or by repeating the option many times.
+List of operations that can be disabled:
+.nf
+.ta +2i
+chown        - don't allow the client to perform the chown operation
+chmod        - don't allow the client to perform the chmod operation
+symlink      - don't allow the client to create symbolic links
+mkfifo       - don't allow the client to create FIFOs
+mkdev        - don't allow the client to create devices
+mksock       - don't allow the client to create sockets
+mkdir        - don't allow the client to create directories
+unlink       - don't allow the client to remove non directory objects (will also deny move/rename operation if target inode already exists!)
+rmdir        - don't allow the client to remove directories (will also deny move/rename operation if target inode already exists!)
+rename       - don't allow the client to change inodes (files, directories) names
+move         - don't allow the client to move inodes (files, directories) to another path
+link         - don't allow the client to create hard links
+create       - don't allow the client to create new files
+readdir      - don't allow the client to list directories ('ls' command will not work)
+read         - don't allow the client to read from files
+write        - don't allow the client to write to files
+truncate     - don't allow the client to shorten the length of a file with truncate command
+setlength    - don't allow the client to increase the length of a file with truncate command
+appendchunks - don't allow the client to add chunks from one file to another (mfsappendchunks)
+snapshot     - don't allow the client to create snapshots
+settrash     - don't allow the client to change trash retention time
+setsclass    - don't allow the client to set storage classes
+seteattr     - don't allow the client to set mfs extra attributes
+setxattr     - don't allow the client to set XATTRs
+setfacl      - don't allow the client to set ACLs
+.fi
+.SH EXAMPLES
+.nf
+.ta +2i
+\fB*                    /       ro\fP
+\fB192.168.1.0/24       /       rw\fP
+\fB192.168.1.0/24       /       rw,alldirs,maproot=0,password=passcode\fP
+\fB10.0.0.0-10.0.0.5    /test   rw,maproot=nobody,password=test\fP
+\fB10.1.0.0/255.255.0.0 /public rw,mapall=1000:1000\fP
+\fB10.2.0.0/16          /       rw,alldirs,maproot=0,mintrashtime=2h30m,maxtrashtime=2w\fP
+\fB192.168.1.0/24       /       rw,disable=unlink:rmdir:truncate\fP
+\fB192.168.1.0/24       /       rw,disable=unlink,disable=rmdir,disable=truncate\fP
+.fi
+.SH "REPORTING BUGS"
+Report bugs to <bugs@moosefs.com>.
+.SH COPYRIGHT
+Copyright (C) 2020 Jakub Kruszona-Zawadzki, Core Technology Sp. z o.o.
+
+This file is part of MooseFS.
+
+MooseFS is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, version 2 (only).
+
+MooseFS is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with MooseFS; if not, write to the Free Software
+Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02111-1301, USA
+or visit http://www.gnu.org/licenses/gpl-2.0.html
+.SH "SEE ALSO"
+.BR mfsmaster (8),
+.BR mfsmaster.cfg (5)

@@ -1,0 +1,8 @@
+# /etc/default/moosefs-cgiserv
+
+# Start mfscgiserv from init.d script on boot.
+#   Only allowed values are "true" and "false".
+#   Undefined values default to "false".
+MFSCGISERV_ENABLE=false
+
+DAEMON_OPTS=""
