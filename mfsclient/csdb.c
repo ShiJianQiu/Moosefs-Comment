@@ -108,10 +108,14 @@ uint32_t csdb_getopcnt(uint32_t ip,uint16_t port) {
 	return result;
 }
 
+/*
+找到或初始化一个csdb
+*/
 void csdb_readinc(uint32_t ip,uint16_t port) {
 	uint32_t hash = CSDB_HASH(ip,port);
 	csdbentry *e;
 	pthread_mutex_lock(csdblock);
+	//如果有这个连接，readopcnt++
 	for (e=csdbhtab[hash] ; e ; e=e->next) {
 		if (e->ip == ip && e->port == port) {
 			e->readopcnt++;
@@ -119,6 +123,7 @@ void csdb_readinc(uint32_t ip,uint16_t port) {
 			return;
 		}
 	}
+	// 如果没有就初始化一个
 	e = malloc(sizeof(csdbentry));
 	e->ip = ip;
 	e->port = port;

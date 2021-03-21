@@ -143,10 +143,10 @@ typedef struct _hintlist {
 } hintlist;
 */
 typedef struct _slist {
-	uint16_t csid;
-	uint8_t valid;
-	uint32_t version;
-	struct _slist *next;
+	uint16_t csid;			//csdata数组的index，chunk server id，一个副本对应一个csdata
+	uint8_t valid;			//副本的状态，包括：INVALID,DEL,BUSY,VALID,TDBUSY,TDVALID
+	uint32_t version;		//副本版本号，正常时应与chunk..version保持一致
+	struct _slist *next;	//指向下一个副本结构
 } slist;
 
 /*
@@ -161,24 +161,26 @@ typedef struct _slist_bucket {
 static slist_bucket *sbhead = NULL;
 static slist *slfreehead = NULL;
 */
-
+/**
+ * chunk is the
+ * */
 typedef struct chunk {
-	uint64_t chunkid;
-	uint32_t version;
-	uint8_t sclassid;
-	uint8_t allvalidcopies;
-	uint8_t regularvalidcopies;
+	uint64_t chunkid;				//块id
+	uint32_t version;				//块的版本号,初始化时为1，每次修改块都会自加1
+	uint8_t sclassid;				// storageclass类型的sclasstab数组id
+	uint8_t allvalidcopies;			//块实际副本数，包括所有VALID、TDVALID、BUSY、TDBUSY状态的副本
+	uint8_t regularvalidcopies;		//块实际副本数，包括所有VALID、BUSY状态的副本
 	unsigned ondangerlist:1;
-	unsigned needverincrease:1;
-	unsigned interrupted:1;
+	unsigned needverincrease:1;		//等于1时表示在更新chunk时version要自加1
+	unsigned interrupted:1;			//等于1表示在有错误副本出现时需紧急调整version自加1
 	unsigned writeinprogress:1;
-	unsigned archflag:1;
-	unsigned operation:3;
-	uint32_t lockedto;
-	uint32_t fcount;
-	slist *slisthead;
-	uint32_t *ftab;
-	struct chunk *next;
+	unsigned archflag:1;			//archived标志
+	unsigned operation:3;			//块操作,包括{NONE, CREATE, SET_VERSION, DUPLICATE, TRUNCATE, DUPTRUNC}
+	uint32_t lockedto;				//块的锁定时间，当块操作为非NONE时，会修改它为当前时间+timeout
+	uint32_t fcount;				//file count
+	slist *slisthead;				//副本链表头指针，不同chunkserver上的chunk副本形成的链表
+	uint32_t *ftab;					//记录所有sclassid
+	struct chunk *next;				//指向下一个chunk结构
 } chunk;
 
 /*
@@ -197,7 +199,7 @@ static uint32_t chunkrehashpos;
 static uint32_t chunkhashsize;
 static uint32_t chunkhashelem;
 
-static uint64_t nextchunkid=1;
+static uint64_t nextchunkid=1;		//每当新建chunk时则自加1，单调递增的。chunkid 相等则认为是一个副本
 #define LOCKTIMEOUT 120
 
 #define UNUSED_DELETE_TIMEOUT (86400*7)
@@ -233,15 +235,15 @@ enum {UNKNOWN_HARD,UNKNOWN_SOFT,CAN_BE_REMOVED,REPL_IN_PROGRESS,WAS_IN_PROGRESS}
 //  REPL_IN_PROGRESS,WAS_IN_PROGRESS - In progress
 
 typedef struct _csdata {
-	void *ptr;//指向matocsserventry结构，用于和chunkserver建立链接
-	csopchunk *opchunks;
-	uint8_t valid;
-	unsigned registered:1;
-	unsigned mfr_state:3;
+	void *ptr;					//指向matocsserventry结构，用于和chunkserver建立链接
+	csopchunk *opchunks;		//用来标记对应的chunk id
+	uint8_t valid;				//data状态是否valid
+	unsigned registered:1;		//是否被注册
+	unsigned mfr_state:3;		//mfr状态：UNKNOWN_HARD, UNKNOWN_SOFT, CAN_BE_REMOVED, REPL_IN_PROGRESS, WAS_IN_PROGRESS
 	uint8_t newchunkdelay;
 	uint8_t lostchunkdelay;
-	uint32_t next;
-	uint32_t prev;
+	uint32_t next;				//标记数组中下一个csdata的下标
+	uint32_t prev;				//标记数组中上一个csdata的下标
 } csdata;
 
 static csdata *cstab = NULL;

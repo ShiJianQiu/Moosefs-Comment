@@ -106,7 +106,9 @@ static inline void csorder_log_chain_element(uint8_t indx,cspri *chelem) {
 	syslog(LOG_NOTICE,"chain_log: chunk[%"PRIu8"] = {ip:%u.%u.%u.%u ; port:%"PRIu16" ; labelmask: %s ; priority: %u.%u}",indx,(chelem->ip>>24)&0xFF,(chelem->ip>>16)&0xFF,(chelem->ip>>8)&0xFF,chelem->ip&0xFF,chelem->port,labelstrbuff,(chelem->priority>>24)&0xFF,chelem->priority&0xFFFFFF);
 }
 */
-
+/*
+对cs根据op数（Client操作数）进行排序（已默认master返回的cs都是优良的），返回cs个数
+*/
 uint32_t csorder_sort(cspri chain[100],uint8_t csdataver,const uint8_t *csdata,uint32_t csdatasize,uint8_t writeflag) {
 	const uint8_t *cp,*cpe;
 //	char labelsbuff[LABELS_BUFF_SIZE];

@@ -138,7 +138,7 @@ typedef struct matocsserventry
 	uint16_t wrepcounter; //matocsserv_replication_begin、matocsserv_replication_end、matocsserv_replication_disconnected
 	uint16_t delcounter;
 
-	uint32_t labelmask;
+	uint32_t labelmask;//联邦模式，多个master管理不同目录？
 	char *labelstr;
 
 	uint32_t create_total_counter;

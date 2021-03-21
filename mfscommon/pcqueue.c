@@ -151,6 +151,7 @@ uint32_t queue_sizeleft(void *que) {
 
 int queue_put(void *que,uint32_t id,uint32_t op,uint8_t *data,uint32_t leng) {
 	queue *q = (queue*)que;
+	//初始化队列元素
 	qentry *qe;
 	qe = malloc(sizeof(qentry));
 	passert(qe);
@@ -225,6 +226,8 @@ int queue_tryput(void *que,uint32_t id,uint32_t op,uint8_t *data,uint32_t leng) 
 	return 0;
 }
 
+//获取que里第一个任务qe，并把qe对象的内容传递给其他形参，其中data里存放的是job指针
+////函数用于从队列中取出一个队列元素，当队列为空时当前线程阻塞。
 int queue_get(void *que,uint32_t *id,uint32_t *op,uint8_t **data,uint32_t *leng) {
 	queue *q = (queue*)que;
 	qentry *qe;
@@ -250,6 +253,7 @@ int queue_get(void *que,uint32_t *id,uint32_t *op,uint8_t **data,uint32_t *leng)
 		errno = EIO;
 		return -1;
 	}
+	//获取队列首元素
 	qe = q->head;
 	q->head = qe->next;
 	if (q->head==NULL) {
@@ -277,7 +281,7 @@ int queue_get(void *que,uint32_t *id,uint32_t *op,uint8_t **data,uint32_t *leng)
 	free(qe);
 	return 0;
 }
-
+//函数用于从队列中取出一个队列元素，当队列为空时当前线程不阻塞。
 int queue_tryget(void *que,uint32_t *id,uint32_t *op,uint8_t **data,uint32_t *leng) {
 	queue *q = (queue*)que;
 	qentry *qe;

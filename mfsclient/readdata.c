@@ -95,6 +95,24 @@ typedef struct cblock_s {
 
 #define MAXREQINQUEUE 16
 
+/*
+read_job_end
+REFRESH	->	NEW
+BREAK	->	NOTNEEDED
+
+read_new_request
+STAGE1:		NEW
+STAGE2:		INQUEUE	(ind->inqueue<MAXREQINQUEUE)->read_enqueue(rreq)
+
+NEW:		new_request_status
+INQUEUE:	enqueue
+BUSY:		working
+REFRESH:	chunk change ,need refresh
+BREAK:		to be deleted
+FILLED:		failled? will to ready
+READY:		ready
+NOTNEEDED:	to be removal
+*/
 enum {NEW,INQUEUE,BUSY,REFRESH,BREAK,FILLED,READY,NOTNEEDED};
 
 #define STATE_NOT_NEEDED(mode) (((mode)==BREAK) || ((mode)==NOTNEEDED))
@@ -160,7 +178,7 @@ typedef struct rrequest_s {
 	double modified;
 	uint8_t refresh;
 	uint8_t mode;
-	uint16_t lcnt;
+	uint16_t lcnt;//read list count
 	pthread_cond_t cond;
 	struct rrequest_s *next,**prev;
 } rrequest;
@@ -177,7 +195,7 @@ typedef struct inodedata_s {
 	uint64_t lastoffset;
 	uint16_t waiting_writers;
 	uint16_t readers_cnt;
-	uint16_t lcnt;
+	uint16_t lcnt;//lock cnt
 	rrequest *reqhead,**reqtail;
 	pthread_cond_t closecond;
 	pthread_cond_t readerscond;
@@ -494,7 +512,9 @@ static inline void read_data_spawn_worker(void) {
 #endif
 }
 
-/* workers_lock:LOCKED */
+/* workers_lock:LOCKED 
+关闭worker
+*/
 static inline void read_data_close_worker(worker *w) {
 	workers_avail--;
 	workers_total--;
@@ -521,6 +541,7 @@ static inline void read_prepare_ip (char ipstr[16],uint32_t ip) {
 	}
 }
 
+//传入的参数是worker
 void* read_worker(void *arg) {
 	uint32_t z1,z2,z3;
 	uint8_t *data;
@@ -611,7 +632,8 @@ void* read_worker(void *arg) {
 		ip = 0;
 		port = 0;
 		csstrip[0] = 0;
-
+		
+		//只有非第一次循环，且workers_avail > SUSTAIN_WORKERS，线程会被关闭
 		if (firsttime==0) {
 			zassert(pthread_mutex_lock(&workers_lock));
 			workers_avail++;
@@ -627,6 +649,8 @@ void* read_worker(void *arg) {
 		firsttime = 0;
 
 		// get next job
+		//data 一个任务，其他形参没有用到
+		//每次循环在jqueue中重新那一个头部的新任务rreq
 		queue_get(jqueue,&z1,&z2,&data,&z3);
 
 		zassert(pthread_mutex_lock(&workers_lock));
@@ -638,8 +662,8 @@ void* read_worker(void *arg) {
 			close_pipe(pipefd);
 			return NULL;
 		}
-
 		workers_avail--;
+		//可用的worker没有了
 		if (workers_avail==0 && workers_total<MAX_WORKERS) {
 			read_data_spawn_worker();
 //			fprintf(stderr,"spawn worker (avail:%"PRIu32" ; total:%"PRIu32")\n",workers_avail,workers_total);
@@ -870,6 +894,7 @@ void* read_worker(void *arg) {
 			chainelements = 0;
 		}
 #endif
+
 		if (/*csdata==NULL || csdatasize==0 || */chainelements==0) {
 			zassert(pthread_mutex_lock(&(ind->lock)));
 			if (ind->trycnt >= minlogretry) {
@@ -1683,6 +1708,7 @@ typedef struct rlist_s {
 } rlist;
 
 static inline rrequest* read_rreq_invalidate(rrequest *rreq) {
+	//mode == NEW,READY,NOTNEEDED
 	if (!STATE_BG_JOBS(rreq->mode)) {
 		if (rreq->lcnt==0) {
 			read_delete_request(rreq); // nobody wants it anymore, so delete it
@@ -1694,6 +1720,8 @@ static inline rrequest* read_rreq_invalidate(rrequest *rreq) {
 		if (rreq->lcnt==0) {
 			rreq->mode = BREAK;
 		} else if (rreq->mode!=INQUEUE) {
+			//MODE == BUSY,REFRESH,BREAK,FILLED
+			//此时lcnt>0
 			rreq->mode = REFRESH;
 		} else {
 			return rreq; // INQUEUE && lcnt>0
@@ -1709,7 +1737,11 @@ static inline rrequest* read_rreq_invalidate(rrequest *rreq) {
 	return rreq;
 }
 
+/**
+ * mode to notneeded or break
+ * */
 static inline void read_rreq_not_needed(rrequest *rreq) {
+
 	if (!STATE_BG_JOBS(rreq->mode)) {
 		if (rreq->lcnt==0) {
 			read_delete_request(rreq); // nobody wants it anymore, so delete it
@@ -1773,7 +1805,7 @@ int read_data(void *vid, uint64_t offset, uint32_t *size, void **vrhead,struct i
 	double now;
 
 	zassert(pthread_mutex_lock(&inode_lock));
-	ind->lcnt++;
+	ind->lcnt++;//lock cnt++
 	zassert(pthread_mutex_unlock(&inode_lock));
 
 	zassert(pthread_mutex_lock(&(ind->lock)));

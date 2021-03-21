@@ -2273,7 +2273,9 @@ void* fs_nop_thread(void *arg) {
 		sleep(1);
 	}
 }
-
+/*
+注册fs_init_threads线程专门负责与master链接，包括消息解析
+*/
 void* fs_receive_thread(void *arg) {
 	const uint8_t *ptr;
 	uint8_t hdr[12];
