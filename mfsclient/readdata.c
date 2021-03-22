@@ -116,6 +116,8 @@ NOTNEEDED:	to be removal
 enum {NEW,INQUEUE,BUSY,REFRESH,BREAK,FILLED,READY,NOTNEEDED};
 
 #define STATE_NOT_NEEDED(mode) (((mode)==BREAK) || ((mode)==NOTNEEDED))
+
+//!STATE_BG_JOBS(mode) ==> mode==new||ready||notneeded
 #define STATE_BG_JOBS(mode) (((mode)==BUSY) || ((mode)==INQUEUE) || ((mode)==REFRESH) || ((mode)==BREAK) || ((mode)==FILLED))
 #define STATE_HAVE_VALID_DATA(mode) (((mode)==READY) || ((mode)==NOTNEEDED))
 /**
@@ -169,7 +171,7 @@ typedef struct rrequest_s {
 	struct inodedata_s *ind;
 	int wakeup_fd;
 	uint8_t waitingworker;
-	uint8_t *data;
+	uint8_t *data;//数据指针
 	uint64_t offset;
 	uint32_t leng;
 	uint32_t rleng;
@@ -545,9 +547,16 @@ static inline void read_prepare_ip (char ipstr[16],uint32_t ip) {
 void* read_worker(void *arg) {
 	uint32_t z1,z2,z3;
 	uint8_t *data;
-	int fd;
+	int fd;//make connection to cs ,read and write
 	int i;
+	/*		
+		pfd[0].fd = fd;
+		pfd[1].fd = pipefd[0];
+	*/
 	struct pollfd pfd[3];
+	//tosend 记录即将send的数据长度，
+	// send已经send的数据长度,
+	// recrived接收到的数据长度
 	uint32_t sent,tosend,received,currentpos;
 	uint8_t notdone;
 	uint8_t recvbuff[20];
@@ -592,7 +601,7 @@ void* read_worker(void *arg) {
 	uint8_t rdstatus;
 	int status;
 	char csstrip[16];
-	uint8_t reqsend;
+	uint8_t reqsend;//send 之后 置1
 	uint8_t closing;
 	uint8_t mode;
 	double start,now,lastrcvd,lastsend;
@@ -602,7 +611,7 @@ void* read_worker(void *arg) {
 	worker *w = (worker*)arg;
 
 	inodedata *ind;
-	rrequest *rreq;
+	rrequest *rreq;//为queue_get中获得的新的任务data
 
 	ip = 0;
 	port = 0;
@@ -651,10 +660,12 @@ void* read_worker(void *arg) {
 		// get next job
 		//data 一个任务，其他形参没有用到
 		//每次循环在jqueue中重新那一个头部的新任务rreq
+		//正常状态下，只能拿到状态为inqueue的任务
 		queue_get(jqueue,&z1,&z2,&data,&z3);
 
 		zassert(pthread_mutex_lock(&workers_lock));
 
+		//任务为空，关闭worker和pipe
 		if (data==NULL) {
 //			fprintf(stderr,"close worker (avail:%"PRIu32" ; total:%"PRIu32")\n",workers_avail,workers_total);
 			read_data_close_worker(w);
@@ -663,11 +674,13 @@ void* read_worker(void *arg) {
 			return NULL;
 		}
 		workers_avail--;
-		//可用的worker没有了
+		//可用的worker没有了,创建新的worker
+		//MAX_WORKERS==250
 		if (workers_avail==0 && workers_total<MAX_WORKERS) {
 			read_data_spawn_worker();
 //			fprintf(stderr,"spawn worker (avail:%"PRIu32" ; total:%"PRIu32")\n",workers_avail,workers_total);
 		}
+		//HEAVYLOAD_WORKERS==150
 		timeoutadd = (workers_total>HEAVYLOAD_WORKERS)?0.0:WORKER_BUSY_NOJOBS_INCREASE_TIMEOUT;
 		zassert(pthread_mutex_unlock(&workers_lock));
 
@@ -1139,7 +1152,7 @@ void* read_worker(void *arg) {
 				status = EINTR;
 				break;
 			}
-
+			//若没有发送，则发送消息
 			if (reqsend==0) {
 				if (rreq->offset > mfleng) {
 					rreq->rleng = 0;
@@ -1153,16 +1166,18 @@ void* read_worker(void *arg) {
 					wptr = sendbuff;
 					put32bit(&wptr,CLTOCS_READ);
 					if (csver>=VERSION2INT(1,7,32)) {
-						put32bit(&wptr,21);
+						put32bit(&wptr,21);//1+8+4+4+4=21
 						put8bit(&wptr,1);
-						tosend = 29;
+						tosend = 29;//4+4+1+8+4+4+4=29
 					} else {
 						put32bit(&wptr,20);
 						tosend = 28;
 					}
 					put64bit(&wptr,chunkid);
 					put32bit(&wptr,version);
+					//偏移量
 					put32bit(&wptr,(rreq->offset+currentpos) & MFSCHUNKMASK);
+					//剩余长度
 					put32bit(&wptr,rreq->rleng-currentpos);
 					sent = 0;
 					reqsend = 1;
@@ -1224,7 +1239,7 @@ void* read_worker(void *arg) {
 			pfd[0].revents = 0;
 			pfd[1].events = POLLIN;
 			pfd[1].revents = 0;
-			//判断pfd中是否有读写等事件发生，并更新pfd状态
+			//判断pfd中是否有读写等事件发生，并更新pfd状态，这里会阻塞？
 			if (poll(pfd,2,100)<0) {
 				if (errno!=EINTR) {
 					if (trycnt >= minlogretry) {
@@ -1294,8 +1309,12 @@ void* read_worker(void *arg) {
 			}
 			if (pfd[0].revents&POLLIN) {
 				lastrcvd = monotonic_seconds();
+				//received初始化为0，第一次必定触发次判断==true，第一次应该接收到
+				//或者收完一个包，进行crc校验后会被置为0
 				if (received < 8) {
+					//若received==0,先读8字节，获取命令type和长度size
 					i = universal_read(fd,recvbuff+received,8-received);
+					//zero read
 					if (i==0) {
 						if (trycnt >= minlogretry) {
 							read_prepare_ip(csstrip,ip);
@@ -1307,6 +1326,7 @@ void* read_worker(void *arg) {
 						status = EIO;
 						break;
 					}
+					//error read
 					if (i<0 && ERRNO_ERROR) {
 						if (trycnt >= minlogretry) {
 							int err = errno;
@@ -1327,7 +1347,8 @@ void* read_worker(void *arg) {
 						rptr = recvbuff;
 
 						reccmd = get32bit(&rptr);
-						recleng = get32bit(&rptr);
+						recleng = get32bit(&rptr);//recleng = 8 + 2 + 2 + 4 + 4 + blocksize = 20 + blocksize
+						//检验长度size
 						if (reccmd==CSTOCL_READ_STATUS) {
 							if (recleng!=9) {
 								syslog(LOG_WARNING,"readworker: got wrong sized status packet from chunkserver (leng:%"PRIu32")",recleng);
@@ -1382,10 +1403,13 @@ void* read_worker(void *arg) {
 						}
 					}
 				}
+				//received += i;后received值会变
 				if (received >= 8) {
+					//如果带block的消息，长度会大于20
 					if (recleng<=20) {
 						i = universal_read(fd,recvbuff + (received-8),recleng - (received-8));
 					} else {
+						//每个block是64k
 						if (received < 8 + 20) {
 #ifdef HAVE_READV
 							siov[0].iov_base = recvbuff + (received-8);
@@ -1394,9 +1418,11 @@ void* read_worker(void *arg) {
 							siov[1].iov_len = recleng - 20;
 							i = readv(fd,siov,2);
 #else
+							//第一次循环会进入到这儿
 							i = universal_read(fd,recvbuff + (received-8),20 - (received-8));
 #endif
 						} else {
+							//最终block会读到rreq->data中（之后的do while循环会进入到这儿）
 							i = universal_read(fd,rreq->data + currentpos,recleng - (received-8));
 						}
 					}
@@ -1442,7 +1468,9 @@ void* read_worker(void *arg) {
 						status = EIO;
 						currentpos = 0; // start again from beginning
 						break;
-					} else if (received == 8+recleng) {
+					} 
+					//只有一个包读完了才会进入到这儿
+					else if (received == 8+recleng) {
 
 						if (reccmd==CSTOCL_READ_STATUS) {
 							rptr = recvbuff;
@@ -1484,7 +1512,7 @@ void* read_worker(void *arg) {
 							}
 							gotstatus = 1;
 						} else if (reccmd==CSTOCL_READ_DATA) {
-							rptr = recvbuff;
+							rptr = recvbuff;//8+2+2+4+4=20
 							recchunkid = get64bit(&rptr);
 							recblocknum = get16bit(&rptr);
 							recoffset = get16bit(&rptr);
@@ -1510,6 +1538,7 @@ void* read_worker(void *arg) {
 								currentpos = 0; // start again from beginning
 								break;
 							}
+							//crc32冗余校验
 							if (reccrc != mycrc32(0,rreq->data + (currentpos - recsize),recsize)) {
 								syslog(LOG_WARNING,"readworker: data checksum error");
 #ifdef RDEBUG
@@ -1741,7 +1770,7 @@ static inline rrequest* read_rreq_invalidate(rrequest *rreq) {
  * mode to notneeded or break
  * */
 static inline void read_rreq_not_needed(rrequest *rreq) {
-
+	//
 	if (!STATE_BG_JOBS(rreq->mode)) {
 		if (rreq->lcnt==0) {
 			read_delete_request(rreq); // nobody wants it anymore, so delete it
@@ -1789,6 +1818,7 @@ static inline void read_inode_free(uint32_t indh,inodedata *indf) {
 }
 
 // return list of rreq
+//
 int read_data(void *vid, uint64_t offset, uint32_t *size, void **vrhead,struct iovec **iov,uint32_t *iovcnt) {
 	inodedata *ind = (inodedata*)vid;
 	rrequest *rreq,*rreqn;

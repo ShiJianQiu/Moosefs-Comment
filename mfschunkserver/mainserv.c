@@ -350,6 +350,7 @@ uint8_t mainserv_read(int sock, const uint8_t *data, uint32_t length)
 		syslog(LOG_NOTICE, "CLTOCS_READ - wrong size (%" PRIu32 "/20|21)", length);
 		return 0;
 	}
+	//protover==1
 	if (length == 21)
 	{
 		protover = get8bit(&data);
